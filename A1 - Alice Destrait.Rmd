@@ -1,0 +1,189 @@
+---
+title: "A1"
+author: "Alice Destrait"
+date: "2024-02-24"
+output: pdf_document
+---
+Memorandum
+
+To: Professor Federico Torreti 
+From: Alice Destrait
+Date: February 24, 2024  
+Re: Explanation of Animated Bar Chart
+
+The original graphics in this dataset were pie charts showing the number of cases per borough for each year. While pie charts can sometimes be useful, they have significant limitations in this instance:
+
+- The multiple pie charts do not effectively facilitate comparison across years and boroughs. An animation allows the viewer to more easily track changes over time.
+
+- With several slivers representing small boroughs, the pie charts fail to accurately represent the data visually. Square bar charts scaled to the data are more accurate.
+
+- Pie charts lack clarity and precision, making it hard to glean exact numbers. The bar chart provides direct numeric labels. 
+
+To address these issues, I created an animated bar chart using the principles of effective data visualization:
+
+Storytelling
+- The animation highlights overall trends and spikes in cases over time, allowing viewers to spot patterns.
+
+CRAP:
+- Comparing cases across boroughs and years is now simple and intuitive.  
+- By sorting boroughs by size, the bars provide accurate visual depiction of the numbers.
+- The animation draws attention to spikes and dips of interest.
+- Precision is enabled with direct labels of values for each bar.
+
+Healy’s Principles: 
+- Bars all start from zero baseline, with axis scaled to data range. This establishes proper visual relation of quantities.
+- Sorting the bars by the “city_category” variable groups like things together scalarly and spatially. 
+- Animating over time adds crucial temporal context.
+
+Cairo’s Five Qualities:
+- Truthful representation using bars with scalar and spatial grouping.
+- Functional type and density of ink is optimized for comprehension. 
+- Beauty is enhanced through clean layout, viridis color scale, and smooth animated transitions. 
+- Insight into trends and outliers is enabled by animation and scaling.
+- Enlightenment about the data is the key goal of the explanatory animation showing case volume changes across boroughs over time.
+
+By focusing on established principles of effective visualization, the new animated chart resolves limitations of the original while exposing key trends in the data.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+
+```{r libraries, echo=TRUE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(gganimate)
+library(gifski)
+library(ggpubr)
+library(gt)
+```
+
+
+```{r read data, echo=TRUE, message=FALSE, warning=FALSE}
+rat_data <- read_csv("data/A1_sightings.csv", na = c("", "NA", "N/A"))
+```
+
+
+```{r clean columns, echo=TRUE, message=FALSE, warning=FALSE}
+names(rat_data) <- tolower(names(rat_data))
+missing_values <- colSums(is.na(rat_data))
+# Identify columns with missing values below the threshold
+columns_to_keep <- names(missing_values)[missing_values <= 101913]
+# Select only the columns with missing values below the threshold
+rat_data_filtered <- rat_data[, columns_to_keep]
+
+single_unique_cols <- sapply(rat_data_filtered, function(x) length(unique(x))) == 1
+
+# Select only the columns without one unique value
+rat_data_filtered <- rat_data_filtered[, !single_unique_cols]
+
+rat_data_filtered <- select(rat_data_filtered, -`street name`)
+```
+
+
+```{r time variables and cleaning, echo=TRUE, message=FALSE, warning=FALSE}
+rat_data_filtered$`created date` <- mdy_hms(rat_data_filtered$`created date`)
+rat_data_filtered$`closed date` <- mdy_hms(rat_data_filtered$`closed date`)
+rat_data_filtered$`due date` <- mdy_hms(rat_data_filtered$`due date`)
+rat_data_filtered$`resolution action updated date` <- mdy_hms(rat_data_filtered$`resolution action updated date`)
+rat_data_filtered <- rat_data_filtered %>%
+  rename(sighting_date = `created date`)
+rat_data_filtered <- rat_data_filtered %>%
+  rename(id = `unique key`)
+rat_data_filtered$city <- str_to_title(rat_data_filtered$city)
+# Create date-related variables
+rat_data_filtered <- rat_data_filtered %>%
+  mutate(
+    sighting_year = year(sighting_date),
+    sighting_month = month(sighting_date),
+    sighting_day = day(sighting_date),
+    sighting_weekday = wday(sighting_date, label = TRUE)
+  )
+```
+
+
+```{r grouping the data, echo=TRUE, message=FALSE, warning=FALSE}
+cities_to_group <- c("New York", "Bronx", "Brooklyn")
+
+# Create a new column to categorize cities
+rat_data_filtered <- rat_data_filtered %>%
+  mutate(city_category = case_when(
+    city %in% cities_to_group ~ city,
+    TRUE ~ "Others"
+  ))
+
+# Group by city_category
+city_counts <- rat_data_filtered %>%
+  group_by(city_category) %>%
+  summarize(total_cases = n()) %>%
+  arrange(desc(total_cases)) %>%
+  slice_head(n = 10)
+
+# Group rat_data_filtered by year and city_category, then count the number of rows per year and city_category
+year_city <- rat_data_filtered %>%
+  filter(city_category %in% city_counts$city_category) %>%
+  group_by(sighting_year, city_category) %>%
+  summarize(num_cases = n())
+
+year_city
+```
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Create plot for the current year
+p <- ggplot(year_city, aes(x = num_cases, y = city_category, fill = city_category)) +
+  geom_bar(stat = "identity") +
+  scale_fill_viridis_d(option = "plasma", begin = 0.1, end = 0.9) +
+  theme_minimal() +
+  labs(title = "Cases by Year and City", x = "Number of Cases", y = "City") +
+  theme(
+    plot.title = element_text(face = "bold", size = 22, hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 14),
+    axis.text = element_text(size= 10),
+    legend.position = "none") +
+  facet_wrap(~ sighting_year, nrow = 4)
+
+#  png(paste0("output/A1.png"))
+#  print(p)
+#  dev.off()
+  
+  # Save the plot as a PDF file
+#  pdf(paste0("output/A1.pdf"))
+#  print(p)
+#  dev.off()
+
+p
+```
+
+
+
+
+```{r graph, eval=FALSE, include=FALSE}
+p <- ggplot(year_city, aes(x = num_cases, y = city_category, fill = city_category)) +
+  geom_bar(stat = "identity") +
+  scale_fill_viridis_d(option = "plasma", begin = 0.1, end = 0.9) +
+  theme_minimal() +
+  labs(title = "Year: {closest_state}", x = "Number of Cases", y = "City") +
+  theme(
+    plot.title = element_text(face = "bold", size = 28, hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 20),
+    axis.text = element_text(size= 16),
+    legend.position = "none"
+  ) +
+  transition_states(sighting_year,
+    transition_length = 4,
+    state_length = 1
+  ) +
+  ease_aes('sine-in-out')
+
+# Render the animation
+animate(
+  p, 
+  200, 
+  fps = 20, 
+  width = 1200, 
+  height = 1000, 
+  renderer = gifski_renderer("output/gganim.gif")
+)
+```
+
